@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>Adding state to controls</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      #map-canvas, #map_canvas {
+        height: 60%;
+        width: 100%
+      }
+
+      @media print {
+        html, body {
+          height: auto;
+        }
+
+        #map_canvas {
+          height: 650px;
+        }
+      }
+    </style>
+    <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
+    <script>
+
+      var map;
+      var chicago = new google.maps.LatLng(27.67265, 85.32492);
+      var directionsService = new google.maps.DirectionsService();
+      var directionsDisplay = new google.maps.DirectionsRenderer();
+
+      /**
+       * The MapControl adds a control to the map that
+       * returns the user to the control's defined home.
+       */
+
+      // Define a property to hold the Home state
+      MapControl.prototype.origin_= null;
+      MapControl.prototype.destination_ = null;
+
+      MapControl.prototype.setOrigin = function(origin) {
+        this.origin_ = origin;
+      }
+      
+       // Define setters and getters for this property
+      MapControl.prototype.getOrigin = function() {
+        return new google.maps.LatLng(this.origin_.lat(),this.origin_.lng());
+      }
+      
+      MapControl.prototype.setDestination = function(destination) {
+        this.destination_ = destination;
+      }
+      // Define setters and getters for this property
+      MapControl.prototype.getDestination = function() {
+        return new google.maps.LatLng(this.destination_.lat(),this.destination_.lng());
+      }
+
+      MapControl.prototype.drawRoute = function() {
+        var request = {
+          origin:this.getOrigin(),
+          destination:this.getDestination(),
+          travelMode: google.maps.DirectionsTravelMode.DRIVING
+        };
+        
+        console.log(request);
+        
+        directionsService.route(request, function(response, status) {
+          if (status == google.maps.DirectionsStatus.OK) {
+            directionsDisplay.setDirections(response);
+          }else if(status==google.maps.DirectionsStatus.NOT_FOUND){
+            alert("Unfortunately ! start/end point unknown to system. Try again with new address.");
+          }
+        });
+
+        // Prepare for next round of destination
+        this.origin_ = null;
+        this.destination_ = null;
+      }
+
+      /** @constructor */
+      function MapControl(controlDiv, map, home) {
+
+        // We set up a variable for this since we're adding
+        // event listeners later.
+        var control = this;
+        var is_origin = false;
+        var is_destination = false;
+        var startMarker = null;
+        var endMarker = null;
+
+        // Set the home property upon construction
+        control.origin_ = home;
+
+        // Set CSS styles for the DIV containing the control
+        // Setting padding to 5 px will offset the control
+        // from the edge of the map
+        controlDiv.style.padding = '5px';
+
+        // Set CSS for the control border
+        var goHomeUI = document.createElement('div');
+        goHomeUI.style.backgroundColor = 'white';
+        goHomeUI.style.borderStyle = 'solid';
+        goHomeUI.style.borderWidth = '2px';
+        goHomeUI.style.cursor = 'pointer';
+        goHomeUI.style.textAlign = 'center';
+        goHomeUI.title = 'Select origin';
+        controlDiv.appendChild(goHomeUI);
+
+        // Set CSS for the control interior
+        var goHomeText = document.createElement('div');
+        goHomeText.style.fontFamily = 'Arial,sans-serif';
+        goHomeText.style.fontSize = '12px';
+        goHomeText.style.paddingLeft = '4px';
+        goHomeText.style.paddingRight = '4px';
+        goHomeText.innerHTML = '<b>Origin</b>';
+        goHomeUI.appendChild(goHomeText);
+
+        // Set CSS for the setHome control border
+        var setHomeUI = document.createElement('div');
+        setHomeUI.style.backgroundColor = 'white';
+        setHomeUI.style.borderStyle = 'solid';
+        setHomeUI.style.borderWidth = '2px';
+        setHomeUI.style.cursor = 'pointer';
+        setHomeUI.style.textAlign = 'center';
+        setHomeUI.title = 'Select Destination';
+        controlDiv.appendChild(setHomeUI);
+
+        // Set CSS for the control interior
+        var setHomeText = document.createElement('div');
+        setHomeText.style.fontFamily = 'Arial,sans-serif';
+        setHomeText.style.fontSize = '12px';
+        setHomeText.style.paddingLeft = '4px';
+        setHomeText.style.paddingRight = '4px';
+        setHomeText.innerHTML = '<b>Destination</b>';
+        setHomeUI.appendChild(setHomeText);
+
+        // Setup the click event listener for Home:
+        // simply set the map to the control's current home property.
+        google.maps.event.addDomListener(goHomeUI, 'click', function() {
+          is_origin = true; is_destination = false;
+          console.log('origin');
+        });
+
+        // Setup the click event listener for Set Home:
+        // Set the control's home to the current Map center.
+        google.maps.event.addDomListener(setHomeUI, 'click', function() {
+          is_destination = true;is_origin = false;
+          console.log('destination');
+        });
+
+        google.maps.event.addListener(map, 'click', function(event) {
+          
+//          console.log(event.latLng);
+          
+          if((is_origin == true) && (is_destination==false)){
+            control.setOrigin(event.latLng);
+             startMarker = new google.maps.Marker({
+                  position: event.latLng,
+                  center: event.latLng,
+                  map: map,
+                  title: 'Start Point'
+              });
+          }
+          
+          if((is_destination == true) && (is_origin==false)) {
+            control.setDestination(event.latLng);
+            
+            endMarker = new google.maps.Marker({
+                  position:event.latLng,
+                  center:event.latLng,
+                  map: map,
+                  title: 'End Point'
+              });
+            
+            // Draw the routes
+            control.drawRoute();
+            startMarker.setMap(null);
+            endMarker.setMap(null);
+            
+            // reset 
+            is_destination= false;
+            is_origin = false;
+          }
+        });
+      }
+
+      function initialize() {
+        var mapDiv = document.getElementById('map-canvas');
+        var mapOptions = {
+          zoom: 15,
+          center: chicago,
+          mapTypeId: google.maps.MapTypeId.ROADMAP
+        }
+        map = new google.maps.Map(mapDiv, mapOptions);
+        
+        directionsDisplay.setMap(map);
+        
+        // Create the DIV to hold the control and
+        // call the HomeControl() constructor passing
+        // in this DIV.
+        var homeControlDiv = document.createElement('div');
+        var homeControl = new MapControl(homeControlDiv, map, chicago);
+
+        homeControlDiv.index = 1;
+        map.controls[google.maps.ControlPosition.TOP_RIGHT].push(homeControlDiv);
+      }
+
+      google.maps.event.addDomListener(window, 'load', initialize);
+      
+    </script>
+  </head>
+  <body>
+    <div id="map-canvas"></div>
+    <br/>
+  </body>
+</html>
